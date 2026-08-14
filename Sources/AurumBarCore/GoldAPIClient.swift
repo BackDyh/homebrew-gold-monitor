@@ -33,7 +33,7 @@ public final class GoldAPIClient {
 
         var request = URLRequest(url: url)
         request.timeoutInterval = timeout
-        request.setValue("AurumBar/0.1.0", forHTTPHeaderField: "User-Agent")
+        request.setValue("AurumBar/0.1.1", forHTTPHeaderField: "User-Agent")
 
         session.dataTask(with: request) { data, response, error in
             if let error {

@@ -15,6 +15,6 @@
 *.tar.gz
 *.rar
 !dist/
-!dist/aurumbar-0.1.0.tar.gz
+!dist/aurumbar-*.tar.gz
 hs_err_pid*
 replay_pid*

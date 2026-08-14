@@ -24,10 +24,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var isRefreshing = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        configureApplicationMenu()
         configureStatusItem()
         guard configureAPIKey() else { return }
         scheduleRefresh()
         refresh()
+    }
+
+    private func configureApplicationMenu() {
+        // 菜单栏后台应用默认没有“编辑”菜单，导致 NSTextField 收不到 ⌘V。
+        // 即使应用菜单不可见，标准 action 仍会沿响应链发送给当前输入框。
+        let mainMenu = NSMenu()
+        let editRootItem = NSMenuItem(
+            title: "编辑",
+            action: nil,
+            keyEquivalent: ""
+        )
+        let editMenu = NSMenu(title: "编辑")
+
+        for (title, action, key) in [
+            ("剪切", "cut:", "x"),
+            ("复制", "copy:", "c"),
+            ("粘贴", "paste:", "v"),
+            ("全选", "selectAll:", "a"),
+        ] {
+            editMenu.addItem(
+                withTitle: title,
+                action: Selector(action),
+                keyEquivalent: key
+            )
+        }
+        editRootItem.submenu = editMenu
+        mainMenu.addItem(editRootItem)
+        NSApp.mainMenu = mainMenu
     }
 
     private func configureStatusItem() {

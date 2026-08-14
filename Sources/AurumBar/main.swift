@@ -3,7 +3,7 @@ import AppKit
 let arguments = Set(CommandLine.arguments.dropFirst())
 
 if arguments.contains("--version") {
-    print("AurumBar 0.1.0")
+    print("AurumBar 0.1.1")
     exit(0)
 }
 
