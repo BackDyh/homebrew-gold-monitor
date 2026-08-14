@@ -13,28 +13,21 @@ AurumBar 是一个原生 macOS 菜单栏 Au99.99 黄金价格监控工具。名�
 
 ## 通过 Homebrew 安装
 
-先把本机仓库注册为 Homebrew Tap，再安装：
+添加 Homebrew Tap 并安装 AurumBar：
 
 ```bash
-brew tap myname-dyh/gold-monitor /Users/back/PyCharmMiscProject/gold-monitor
-brew install myname-dyh/gold-monitor/aurumbar
+brew tap BackDyh/gold-monitor
+brew install aurumbar
 brew services start aurumbar
 ```
-
-仓库推送到 GitHub 后，其他 Mac 可以改用：
-
-```bash
-brew tap myname-dyh/gold-monitor https://github.com/myname-dyh/gold-monitor
-brew install myname-dyh/gold-monitor/aurumbar
-```
-
-第一次启动会弹出 AppKey 引导。点击“打开申请页面”，申请聚合数据的“黄金数据”（接口 ID 29），复制个人 AppKey 后保存即可。
 
 如果只想本次运行、不设置登录启动：
 
 ```bash
 aurumbar
 ```
+
+第一次启动会弹出 AppKey 引导。点击“打开申请页面”，申请聚合数据的“黄金数据”（接口 ID 29），复制个人 AppKey 后保存即可。
 
 ## 常用命令
 
