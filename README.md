@@ -1,2 +1,67 @@
-# gold-monitor
-基于聚合数据做的黄金价格监控
+# AurumBar
+
+AurumBar 是一个原生 macOS 菜单栏 Au99.99 黄金价格监控工具。名字来自拉丁语 `Aurum`（黄金）和 macOS 菜单栏 `Bar`。
+
+## 特性
+
+- 原生 Swift/AppKit 实现，无 Python 运行环境。
+- 菜单栏清晰显示价格并自动适配明暗外观。
+- 默认每 30 分钟刷新，价格变化时发送系统通知。
+- 请求失败时保留最后一次有效价格，并限制重复错误通知。
+- 首次启动引导申请个人聚合数据 AppKey。
+- AppKey 只保存在 macOS 钥匙串，不写入源码或配置文件。
+
+## 通过 Homebrew 安装
+
+先把本机仓库注册为 Homebrew Tap，再安装：
+
+```bash
+brew tap myname-dyh/gold-monitor /Users/back/PyCharmMiscProject/gold-monitor
+brew install myname-dyh/gold-monitor/aurumbar
+brew services start aurumbar
+```
+
+仓库推送到 GitHub 后，其他 Mac 可以改用：
+
+```bash
+brew tap myname-dyh/gold-monitor https://github.com/myname-dyh/gold-monitor
+brew install myname-dyh/gold-monitor/aurumbar
+```
+
+第一次启动会弹出 AppKey 引导。点击“打开申请页面”，申请聚合数据的“黄金数据”（接口 ID 29），复制个人 AppKey 后保存即可。
+
+如果只想本次运行、不设置登录启动：
+
+```bash
+aurumbar
+```
+
+## 常用命令
+
+```bash
+# 查看版本
+aurumbar --version
+
+# 删除钥匙串中的 AppKey，下次启动重新提示
+aurumbar --reset-key
+
+# 启动、停止登录项
+brew services start aurumbar
+brew services stop aurumbar
+
+# 卸载
+brew uninstall aurumbar
+```
+
+## 从源码开发
+
+要求 macOS 13 或更高版本，并安装 Xcode Command Line Tools。
+
+```bash
+swift run aurumbar-checks
+swift run aurumbar
+```
+
+## 数据说明
+
+行情来自聚合数据黄金接口，仅供个人学习和参考，不构成投资建议。

@@ -1,16 +1,12 @@
-# Compiled class file
-*.class
-
-# Log file
+.DS_Store
+.build/
+.swiftpm/
 *.log
 
-# BlueJ files
+# Existing repository ignores
+*.class
 *.ctxt
-
-# Mobile Tools for Java (J2ME)
 .mtj.tmp/
-
-# Package Files #
 *.jar
 *.war
 *.nar
@@ -18,7 +14,7 @@
 *.zip
 *.tar.gz
 *.rar
-
-# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
+!dist/
+!dist/aurumbar-0.1.0.tar.gz
 hs_err_pid*
 replay_pid*
