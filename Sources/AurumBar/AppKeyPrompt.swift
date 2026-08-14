@@ -24,11 +24,22 @@ final class AppKeyPrompt {
             let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 360, height: 24))
             field.placeholderString = "粘贴个人 AppKey"
             field.stringValue = existingKey ?? ""
+            field.isEditable = true
+            field.isSelectable = true
+
+            let fieldMenu = NSMenu()
+            fieldMenu.addItem(
+                withTitle: "粘贴",
+                action: #selector(NSText.paste(_:)),
+                keyEquivalent: ""
+            )
+            field.menu = fieldMenu
             alert.accessoryView = field
             alert.addButton(withTitle: "保存并启动")
             alert.addButton(withTitle: "打开申请页面")
             alert.addButton(withTitle: firstRun ? "退出" : "取消")
             alert.window.initialFirstResponder = field
+            alert.window.makeFirstResponder(field)
 
             switch alert.runModal() {
             case .alertFirstButtonReturn:

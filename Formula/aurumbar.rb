@@ -1,8 +1,8 @@
 class Aurumbar < Formula
   desc "Native macOS menu bar monitor for Au99.99 gold prices"
   homepage "https://www.juhe.cn/docs/api/id/29"
-  url "file://#{File.expand_path("../dist/aurumbar-0.1.0.tar.gz", __dir__)}"
-  sha256 "c04f5d5bfdc808b1c9352d4ff518cc463d43f276b4664c8a2011e940ef11e773"
+  url "file://#{File.expand_path("../dist/aurumbar-0.1.1.tar.gz", __dir__)}"
+  sha256 "ff8013ca4287200693e9bc31f99d1cea6a18dee4bc8881d852b3f0aaa6a32c05"
   license "MIT"
 
   depends_on macos: :ventura
