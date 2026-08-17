@@ -1,0 +1,32 @@
+# This workflow will build a Swift project
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-swift
+
+name: AurumBar CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Swift version
+        run: swift --version
+
+      - name: Run checks
+        run: swift run aurumbar-checks
+
+      - name: Build release
+        run: swift build -c release --product aurumbar
+
+      - name: Validate Formula syntax
+        run: ruby -c Formula/aurumbar.rb
