@@ -7,6 +7,8 @@ AurumBar 是一个原生 macOS 菜单栏 Au99.99 黄金价格监控工具。名�
 - 原生 Swift/AppKit 实现。
 - 菜单栏清晰显示价格并自动适配明暗外观。
 - 默认每 30 分钟刷新，价格变化时发送系统通知。
+- 网络异常时进行有限重试，不对空行情重复消耗 API 次数。
+- 跨启动保留最后一次有效价格。
 - AppKey 只保存在 macOS 钥匙串，不写入源码或配置文件。
 
 ## 通过 Homebrew 安装
@@ -19,10 +21,10 @@ brew install aurumbar
 brew services start aurumbar
 ```
 
-如果只想本次运行、不设置登录启动：
+如果只想静默地在后台运行、不设置登录启动：
 
 ```bash
-aurumbar
+aurumbar start
 ```
 
 第一次启动会弹出 AppKey 引导。点击“打开申请页面”，申请聚合数据的“黄金数据”（接口 ID 29），复制个人 AppKey 后保存即可。
@@ -35,6 +37,13 @@ aurumbar --version
 
 # 删除钥匙串中的 AppKey，下次启动重新提示
 aurumbar --reset-key
+
+# 启动、停止当前运行的监控
+aurumbar start
+aurumbar stop
+
+# 查看后台运行日志
+tail -f ~/Library/Logs/AurumBar/aurumbar.log
 
 # 启动、停止登录项
 brew services start aurumbar
@@ -50,7 +59,7 @@ brew uninstall aurumbar
 
 ```bash
 swift run aurumbar-checks
-swift run aurumbar
+swift run aurumbar run
 ```
 
 ## 数据说明

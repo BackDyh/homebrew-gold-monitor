@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let keychain = KeychainStore()
     private let prompt = AppKeyPrompt()
     private let notifier = AppleScriptNotifier()
+    private let quoteCache = QuoteCache()
 
     private var statusItem: NSStatusItem!
     private var infoItem: NSMenuItem!
@@ -18,17 +19,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var apiKey = ""
     private var currentQuote: GoldQuote?
     private var lastError: String?
+    private var quoteUnavailable = false
     private var lastNotifiedPrice: String?
     private var lastErrorMessage: String?
     private var lastErrorNotificationDate: Date?
     private var isRefreshing = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        guard RuntimeControl.claimCurrentProcess() else {
+            fputs("AurumBar: 已有一个实例在运行\n", stderr)
+            NSApp.terminate(nil)
+            return
+        }
+        configureRuntimeControl()
         configureApplicationMenu()
         configureStatusItem()
+        restoreCachedQuote()
         guard configureAPIKey() else { return }
         scheduleRefresh()
         refresh()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        RuntimeControl.clearCurrentProcess()
+        DistributedNotificationCenter.default().removeObserver(self)
+    }
+
+    private func configureRuntimeControl() {
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(stopRequested),
+            name: RuntimeControl.stopNotification,
+            object: nil,
+            suspensionBehavior: .deliverImmediately
+        )
     }
 
     private func configureApplicationMenu() {
@@ -119,6 +143,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = menu
     }
 
+    private func restoreCachedQuote() {
+        guard let quote = quoteCache.load() else { return }
+        currentQuote = quote
+        lastNotifiedPrice = quote.price
+        statusItem.button?.title = formatMenuPrice(quote.price)
+        statusItem.button?.toolTip = "上次有效行情：\(quote.price) 元/克（\(quote.sourceTime)）"
+        infoItem.title = "\(quote.price) 元/克（上次有效行情）"
+    }
+
     private func configureAPIKey() -> Bool {
         if let storedKey = keychain.load(), !storedKey.isEmpty {
             apiKey = storedKey
@@ -173,7 +206,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case let .success(quote):
                 self.handleSuccess(quote)
             case let .failure(error):
-                self.handleFailure(error.localizedDescription)
+                self.handleFailure(error)
             }
         }
     }
@@ -181,6 +214,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func handleSuccess(_ quote: GoldQuote) {
         currentQuote = quote
         lastError = nil
+        quoteUnavailable = false
+        quoteCache.save(quote)
 
         let menuPrice = formatMenuPrice(quote.price)
         statusItem.button?.title = menuPrice
@@ -196,8 +231,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastNotifiedPrice = quote.price
     }
 
-    private func handleFailure(_ message: String) {
+    private func handleFailure(_ error: Error) {
+        if let apiError = error as? GoldAPIError {
+            if apiError == .quoteUnavailable || apiError == .missingMarketData {
+                handleQuoteUnavailable(apiError.localizedDescription)
+                return
+            }
+        }
+
+        let message = error.localizedDescription
+        fputs("AurumBar: 行情请求失败：\(message)\n", stderr)
         lastError = message
+        quoteUnavailable = false
         if currentQuote == nil {
             statusItem.button?.title = "Au —"
             infoItem.title = "获取失败：\(message)"
@@ -213,6 +258,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             notifier.send(title: "黄金价格获取失败", message: message)
             lastErrorMessage = message
             lastErrorNotificationDate = now
+        }
+    }
+
+    private func handleQuoteUnavailable(_ reason: String) {
+        fputs("AurumBar: \(reason)\n", stderr)
+        lastError = nil
+        quoteUnavailable = true
+
+        if let quote = currentQuote {
+            statusItem.button?.toolTip = "暂无新行情，显示上次有效价格：\(quote.price) 元/克"
+            infoItem.title = "\(quote.price) 元/克（上次有效行情）"
+        } else {
+            statusItem.button?.title = "Au —"
+            statusItem.button?.toolTip = "接口暂时没有返回有效行情"
+            infoItem.title = "暂时没有可用行情"
         }
     }
 
@@ -240,12 +300,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ]
             if let lastError {
                 lines.append("最近错误：\(lastError)")
+            } else if quoteUnavailable {
+                lines.append("当前状态：暂无新行情，显示上次有效价格")
             } else {
                 lines.append("当前状态：正常")
             }
             alert.informativeText = lines.joined(separator: "\n")
         } else {
-            alert.informativeText = lastError ?? "尚未获取到有效行情"
+            alert.informativeText = quoteUnavailable
+                ? "接口暂时没有返回有效行情"
+                : lastError ?? "尚未获取到有效行情"
         }
         alert.runModal()
     }
@@ -263,6 +327,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openApplicationPage() {
         NSWorkspace.shared.open(AppKeyPrompt.applicationURL)
+    }
+
+    @objc private func stopRequested(_ notification: Notification) {
+        quit()
     }
 
     @objc private func quit() {

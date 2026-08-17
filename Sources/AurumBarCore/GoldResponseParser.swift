@@ -33,6 +33,11 @@ public enum GoldResponseParser {
         }
 
         let price = stringValue(record["latestpri"])
+        let normalizedPrice = price.lowercased()
+        if price.isEmpty || ["--", "-", "—", "null", "nil"].contains(normalizedPrice) {
+            throw GoldAPIError.quoteUnavailable
+        }
+
         guard
             let decimal = Decimal(
                 string: price,

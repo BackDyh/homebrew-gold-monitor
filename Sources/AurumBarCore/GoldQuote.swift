@@ -1,6 +1,6 @@
 import Foundation
 
-public struct GoldQuote: Equatable, Sendable {
+public struct GoldQuote: Codable, Equatable, Sendable {
     public let name: String
     public let price: String
     public let changePercent: String
@@ -21,8 +21,10 @@ public struct GoldQuote: Equatable, Sendable {
 
 public enum GoldAPIError: LocalizedError, Equatable {
     case invalidResponse
+    case httpStatus(Int)
     case apiError(String)
     case missingMarketData
+    case quoteUnavailable
     case invalidPrice(String)
     case network(String)
 
@@ -30,10 +32,14 @@ public enum GoldAPIError: LocalizedError, Equatable {
         switch self {
         case .invalidResponse:
             return "接口没有返回有效数据"
+        case let .httpStatus(statusCode):
+            return "接口 HTTP 状态异常：\(statusCode)"
         case let .apiError(reason):
             return "接口错误：\(reason)"
         case .missingMarketData:
             return "接口结果中缺少 Au99.99 行情"
+        case .quoteUnavailable:
+            return "接口暂时没有返回有效行情"
         case let .invalidPrice(price):
             return "接口返回了无效价格：\(price.isEmpty ? "空值" : price)"
         case let .network(message):
