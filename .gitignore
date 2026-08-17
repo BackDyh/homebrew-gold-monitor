@@ -14,7 +14,6 @@
 *.zip
 *.tar.gz
 *.rar
-!dist/
-!dist/aurumbar-*.tar.gz
+/dist/
 hs_err_pid*
 replay_pid*
