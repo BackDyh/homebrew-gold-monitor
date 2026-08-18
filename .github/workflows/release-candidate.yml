@@ -1,0 +1,45 @@
+name: AurumBar Release Candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Semantic version without the v prefix
+        required: true
+      signing:
+        description: Signing mode
+        type: choice
+        required: true
+        default: unsigned
+        options:
+          - unsigned
+          - developer-id
+
+permissions:
+  contents: read
+
+jobs:
+  candidate:
+    runs-on: macos-14
+    timeout-minutes: 45
+    environment: ${{ inputs.signing == 'developer-id' && 'apple-release-signing' || '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run tests
+        run: swift test
+
+      - name: Build candidate
+        env:
+          AURUMBAR_CODESIGN_IDENTITY: ${{ secrets.AURUMBAR_CODESIGN_IDENTITY }}
+          AURUMBAR_NOTARY_PROFILE: ${{ secrets.AURUMBAR_NOTARY_PROFILE }}
+        run: scripts/build-release.sh "${{ inputs.version }}" --signing "${{ inputs.signing }}"
+
+      - name: Upload candidate only
+        uses: actions/upload-artifact@v4
+        with:
+          name: aurumbar-${{ inputs.version }}-candidate
+          path: .build/release-artifacts/
+          if-no-files-found: error
+          retention-days: 14

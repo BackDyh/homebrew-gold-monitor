@@ -1,6 +1,11 @@
+import CoreFoundation
 import Foundation
 
 public enum GoldResponseParser {
+    private static let pricePattern = try! NSRegularExpression(
+        pattern: #"^[0-9]+(?:\.[0-9]+)?$"#
+    )
+
     public static func parse(data: Data) throws -> GoldQuote {
         let json: Any
         do {
@@ -16,8 +21,10 @@ public enum GoldResponseParser {
             throw GoldAPIError.invalidResponse
         }
 
-        let resultCode = String(describing: payload["resultcode"] ?? "")
-        guard resultCode == "200" else {
+        guard let resultCode = resultCode(payload["resultcode"]) else {
+            throw GoldAPIError.invalidResponse
+        }
+        guard resultCode == 200 else {
             let reason = stringValue(payload["reason"], fallback: "未知错误")
             throw GoldAPIError.apiError(reason)
         }
@@ -38,7 +45,9 @@ public enum GoldResponseParser {
             throw GoldAPIError.quoteUnavailable
         }
 
+        let range = NSRange(price.startIndex ..< price.endIndex, in: price)
         guard
+            Self.pricePattern.firstMatch(in: price, range: range)?.range == range,
             let decimal = Decimal(
                 string: price,
                 locale: Locale(identifier: "en_US_POSIX")
@@ -50,10 +59,17 @@ public enum GoldResponseParser {
 
         return GoldQuote(
             name: stringValue(record["variety"], fallback: "Au99.99"),
-            price: price,
+            price: NSDecimalNumber(decimal: decimal).stringValue,
             changePercent: stringValue(record["limit"], fallback: "--"),
             sourceTime: stringValue(record["time"], fallback: "--")
         )
+    }
+
+    private static func resultCode(_ value: Any?) -> Int? {
+        if let string = scalarString(value), let code = Int(string) {
+            return code
+        }
+        return nil
     }
 
     private static func normalizedVariety(_ value: Any?) -> String {
@@ -67,11 +83,21 @@ public enum GoldResponseParser {
         _ value: Any?,
         fallback: String = ""
     ) -> String {
-        guard let value else { return fallback }
+        guard let value = scalarString(value) else { return fallback }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? fallback : trimmed
+    }
+
+    private static func scalarString(_ value: Any?) -> String? {
+        guard let value, !(value is NSNull) else { return nil }
         if let string = value as? String {
-            let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? fallback : trimmed
+            return string
         }
-        return String(describing: value)
+        if let number = value as? NSNumber,
+           CFGetTypeID(number) != CFBooleanGetTypeID()
+        {
+            return number.stringValue
+        }
+        return nil
     }
 }

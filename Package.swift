@@ -2,6 +2,7 @@
 
 import PackageDescription
 
+
 let package = Package(
     name: "AurumBar",
     platforms: [
@@ -9,17 +10,24 @@ let package = Package(
     ],
     products: [
         .executable(name: "aurumbar", targets: ["AurumBar"]),
-        .executable(name: "aurumbar-checks", targets: ["AurumBarChecks"]),
     ],
     targets: [
         .target(name: "AurumBarCore"),
-        .executableTarget(
-            name: "AurumBar",
+        .target(
+            name: "AurumBarRuntime",
             dependencies: ["AurumBarCore"]
         ),
         .executableTarget(
-            name: "AurumBarChecks",
+            name: "AurumBar",
+            dependencies: ["AurumBarCore", "AurumBarRuntime"]
+        ),
+        .testTarget(
+            name: "AurumBarCoreTests",
             dependencies: ["AurumBarCore"]
+        ),
+        .testTarget(
+            name: "AurumBarRuntimeTests",
+            dependencies: ["AurumBarCore", "AurumBarRuntime"]
         ),
     ]
 )

@@ -1,32 +1,58 @@
-# This workflow will build a Swift project
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-swift
-
 name: AurumBar CI
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aurumbar-ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build:
-    runs-on: macos-latest
-
+  build-and-test:
+    runs-on: macos-14
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Show Swift version
-        run: swift --version
+      - name: Show toolchain versions
+        run: |
+          swift --version
+          xcodebuild -version
 
-      - name: Run checks
-        run: swift run aurumbar-checks
+      - name: Run tests
+        run: swift test
 
-      - name: Build release
-        run: swift build -c release --product aurumbar
+      - name: Build release candidate
+        run: scripts/build-release.sh 0.1.3 --signing unsigned
 
-      - name: Validate Formula syntax
-        run: ruby -c Formula/aurumbar.rb
+      - name: Validate scripts and Formula
+        run: |
+          bash -n scripts/*.sh
+          ruby -c Formula/aurumbar.rb
+
+  formula:
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create temporary tap
+        run: |
+          TAP="$(brew --repository)/Library/Taps/aurumbar/homebrew-ci"
+          mkdir -p "$TAP/Formula"
+          cp Formula/aurumbar.rb "$TAP/Formula/"
+
+      - name: Fetch, install, and test Formula
+        run: |
+          brew fetch --force aurumbar/ci/aurumbar
+          brew install --build-from-source aurumbar/ci/aurumbar
+          brew test aurumbar/ci/aurumbar
+          "$(brew --prefix aurumbar/ci/aurumbar)/bin/aurumbar" --version

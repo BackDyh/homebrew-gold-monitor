@@ -1,8 +1,12 @@
 import AppKit
+import AurumBarCore
+import AurumBarRuntime
 import Darwin
 
-enum RuntimeControl {
-    static let stopNotification = Notification.Name("com.back.aurumbar.stop")
+private let alreadyRunningExitCode: Int32 = 75
+
+public enum RuntimeControl {
+    public static let stopNotification = Notification.Name("com.back.aurumbar.stop")
     private static let fileManager = FileManager.default
 
     private static var applicationSupportURL: URL {
@@ -10,8 +14,8 @@ enum RuntimeControl {
             .appendingPathComponent("Library/Application Support/AurumBar", isDirectory: true)
     }
 
-    private static var pidFileURL: URL {
-        applicationSupportURL.appendingPathComponent("aurumbar.pid")
+    public static var lockFileURL: URL {
+        applicationSupportURL.appendingPathComponent("aurumbar.lock")
     }
 
     private static var logFileURL: URL {
@@ -19,91 +23,53 @@ enum RuntimeControl {
             .appendingPathComponent("Library/Logs/AurumBar/aurumbar.log")
     }
 
-    static func startInBackground() throws -> pid_t {
-        if let runningPID = runningProcessID() {
-            throw RuntimeControlError.alreadyRunning(runningPID)
-        }
-
+    public static func startInBackground() throws {
         try fileManager.createDirectory(
             at: logFileURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
         )
         if !fileManager.fileExists(atPath: logFileURL.path) {
-            fileManager.createFile(atPath: logFileURL.path, contents: nil)
+            guard fileManager.createFile(
+                atPath: logFileURL.path,
+                contents: nil,
+                attributes: [.posixPermissions: 0o600]
+            ) else {
+                throw RuntimeControlError.logFileUnavailable
+            }
         }
 
         let logHandle = try FileHandle(forWritingTo: logFileURL)
+        defer { try? logHandle.close() }
         try logHandle.seekToEnd()
-        let inputHandle = FileHandle(forReadingAtPath: "/dev/null")!
-        let executablePath = try currentExecutablePath()
+        guard let inputHandle = FileHandle(forReadingAtPath: "/dev/null") else {
+            throw RuntimeControlError.standardInputUnavailable
+        }
+        defer { try? inputHandle.close() }
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/nohup")
-        process.arguments = [executablePath, "run"]
+        process.arguments = [try currentExecutablePath(), "run"]
         process.standardInput = inputHandle
         process.standardOutput = logHandle
         process.standardError = logHandle
         try process.run()
-        try writeProcessID(process.processIdentifier)
 
-        Thread.sleep(forTimeInterval: 0.15)
-        guard process.isRunning else {
-            try? fileManager.removeItem(at: pidFileURL)
-            throw RuntimeControlError.launchFailed(process.terminationStatus)
+        Thread.sleep(forTimeInterval: 0.2)
+        guard !process.isRunning else { return }
+        if process.terminationStatus == alreadyRunningExitCode {
+            return
         }
-        return process.processIdentifier
+        throw RuntimeControlError.launchFailed(process.terminationStatus)
     }
 
-    static func claimCurrentProcess() -> Bool {
-        let currentPID = getpid()
-        if let runningPID = runningProcessID(), runningPID != currentPID {
-            return false
-        }
-        do {
-            try writeProcessID(currentPID)
-            return true
-        } catch {
-            fputs("AurumBar: 无法写入 PID 文件：\(error.localizedDescription)\n", stderr)
-            return false
-        }
-    }
-
-    static func clearCurrentProcess() {
-        guard runningProcessID() == getpid() else { return }
-        try? fileManager.removeItem(at: pidFileURL)
-    }
-
-    static func requestStop() {
+    public static func requestStop() {
         DistributedNotificationCenter.default().postNotificationName(
             stopNotification,
             object: nil,
             userInfo: nil,
             deliverImmediately: true
         )
-    }
-
-    private static func runningProcessID() -> pid_t? {
-        guard
-            let rawPID = try? String(contentsOf: pidFileURL, encoding: .utf8),
-            let pid = pid_t(rawPID.trimmingCharacters(in: .whitespacesAndNewlines)),
-            pid > 1
-        else {
-            return nil
-        }
-
-        if kill(pid, 0) == 0 || errno == EPERM {
-            return pid
-        }
-        try? fileManager.removeItem(at: pidFileURL)
-        return nil
-    }
-
-    private static func writeProcessID(_ pid: pid_t) throws {
-        try fileManager.createDirectory(
-            at: applicationSupportURL,
-            withIntermediateDirectories: true
-        )
-        try String(pid).write(to: pidFileURL, atomically: true, encoding: .utf8)
     }
 
     private static func currentExecutablePath() throws -> String {
@@ -119,19 +85,22 @@ enum RuntimeControl {
     }
 }
 
-enum RuntimeControlError: LocalizedError {
-    case alreadyRunning(pid_t)
+public enum RuntimeControlError: LocalizedError {
     case executablePathUnavailable
     case launchFailed(Int32)
+    case logFileUnavailable
+    case standardInputUnavailable
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
-        case let .alreadyRunning(pid):
-            return "AurumBar 已在运行（PID \(pid)）"
         case .executablePathUnavailable:
             return "无法确定 AurumBar 可执行文件路径"
         case let .launchFailed(status):
             return "AurumBar 后台进程启动失败（退出码 \(status)）"
+        case .logFileUnavailable:
+            return "无法创建 AurumBar 日志文件"
+        case .standardInputUnavailable:
+            return "无法打开 /dev/null"
         }
     }
 }
@@ -153,12 +122,17 @@ func printHelp() {
 
 switch arguments.first {
 case "--version":
-    print("AurumBar 0.1.2")
+    print("AurumBar \(AurumBarVersion.current)")
     exit(0)
 case "--reset-key":
-    KeychainStore().delete()
-    print("已删除 AurumBar AppKey，下次启动会重新提示。")
-    exit(0)
+    do {
+        try KeychainStore().delete()
+        print("已删除 AurumBar AppKey，下次启动会重新提示。")
+        exit(0)
+    } catch {
+        fputs("\(error.localizedDescription)\n", stderr)
+        exit(1)
+    }
 case "--help", "-h", nil:
     printHelp()
     exit(0)
@@ -168,9 +142,7 @@ case "start":
         exit(64)
     }
     do {
-        _ = try RuntimeControl.startInBackground()
-        exit(0)
-    } catch RuntimeControlError.alreadyRunning {
+        try RuntimeControl.startInBackground()
         exit(0)
     } catch {
         fputs("\(error.localizedDescription)\n", stderr)
@@ -195,8 +167,20 @@ default:
     exit(64)
 }
 
+let instanceLock: SingleInstanceLock
+do {
+    instanceLock = try SingleInstanceLock(fileURL: RuntimeControl.lockFileURL)
+} catch SingleInstanceLockError.alreadyLocked {
+    fputs("AurumBar: 已有一个实例在运行\n", stderr)
+    exit(alreadyRunningExitCode)
+} catch {
+    fputs("\(error.localizedDescription)\n", stderr)
+    exit(1)
+}
+
 let application = NSApplication.shared
 let delegate = MainActor.assumeIsolated { AppDelegate() }
 application.setActivationPolicy(.accessory)
 application.delegate = delegate
 application.run()
+_ = instanceLock
