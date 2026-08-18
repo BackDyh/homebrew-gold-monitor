@@ -39,7 +39,14 @@ public enum GoldResponseParser {
             throw GoldAPIError.missingMarketData
         }
 
-        let price = stringValue(record["latestpri"])
+        let rawPrice = record["latestpri"]
+        guard rawPrice != nil, !(rawPrice is NSNull) else {
+            throw GoldAPIError.quoteUnavailable
+        }
+        guard let scalarPrice = scalarString(rawPrice) else {
+            throw GoldAPIError.invalidPrice(String(describing: rawPrice!))
+        }
+        let price = scalarPrice.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedPrice = price.lowercased()
         if price.isEmpty || ["--", "-", "—", "null", "nil"].contains(normalizedPrice) {
             throw GoldAPIError.quoteUnavailable
