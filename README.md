@@ -1,19 +1,40 @@
 # AurumBar
 
-AurumBar 是一个原生 macOS 菜单栏 Au99.99 黄金价格监控工具。名字来自拉丁语 `Aurum`（黄金）和 macOS 菜单栏 `Bar`。
+<p align="center">
+  <strong>在 macOS 菜单栏中，安静地关注 Au99.99 黄金价格。</strong>
+</p>
 
-## 特性
+<p align="center">
+  <a href="https://github.com/BackDyh/homebrew-gold-monitor/actions/workflows/swift.yml"><img src="https://github.com/BackDyh/homebrew-gold-monitor/actions/workflows/swift.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
+  <img src="https://img.shields.io/badge/macOS-13%2B-black.svg" alt="macOS 13+">
+  <img src="https://img.shields.io/badge/Swift-5.9%2B-orange.svg" alt="Swift 5.9+">
+</p>
 
-- 原生 Swift/AppKit 实现。
-- 菜单栏清晰显示价格并自动适配明暗外观。
-- 默认每 30 分钟刷新，价格变化时发送系统通知。
-- 网络异常时进行有限重试，不对空行情重复消耗 API 次数。
-- 跨启动保留最后一次有效价格。
-- AppKey 保存在 macOS 钥匙串，不写入源码、行情缓存或日志。
+AurumBar 是一个轻量的原生 macOS 菜单栏应用，用于查看上海黄金交易所 **Au99.99** 的最新价格。它由 Swift 和 AppKit 构建，没有第三方运行时依赖，不占用 Dock，也不会加入额外的分析或遥测服务。
 
-## 通过 Homebrew 安装
+> 名字来自拉丁语 *Aurum*（黄金）与 macOS 菜单栏 *Bar*。
 
-添加 Homebrew Tap 并安装当前稳定版：
+## 功能
+
+- 在菜单栏直接显示最新价格
+- 每 30 分钟自动刷新，也可随时手动刷新
+- 价格变化时发送 macOS 系统通知
+- 网络临时异常时进行有限重试
+- 无新行情时继续显示最后一次有效价格
+- 自动适配 macOS 明暗外观
+- AppKey 存储在 macOS 钥匙串中
+- 支持 Apple Silicon 与 Intel Mac
+
+## 系统要求
+
+- macOS 13 Ventura 或更高版本
+- 一个聚合数据的个人 AppKey
+  - 数据接口：[黄金数据（接口 ID 29）](https://www.juhe.cn/docs/api/id/29)
+
+## 安装
+
+### Homebrew
 
 ```bash
 brew tap BackDyh/gold-monitor
@@ -21,86 +42,153 @@ brew install aurumbar
 brew services start aurumbar
 ```
 
-如果只想静默地在后台运行、不设置登录启动：
+`brew services start` 会让 AurumBar 在登录后自动启动。
+
+如果不需要登录启动，可以手动运行：
 
 ```bash
 aurumbar start
 ```
 
-第一次启动会弹出 AppKey 引导。点击“打开申请页面”，申请聚合数据的“黄金数据”（接口 ID 29），复制个人 AppKey 后保存即可。
+### 从源码运行
 
-## 常用命令
+```bash
+git clone https://github.com/BackDyh/homebrew-gold-monitor.git
+cd homebrew-gold-monitor
+swift run aurumbar run
+```
+
+构建项目需要 Xcode Command Line Tools：
+
+```bash
+xcode-select --install
+```
+
+## 首次使用
+
+首次启动时，AurumBar 会提示输入聚合数据 AppKey：
+
+1. 打开[黄金数据接口页面](https://www.juhe.cn/docs/api/id/29)并申请 AppKey。
+2. 将 AppKey 粘贴到 AurumBar 的安全输入框中。
+3. 保存后，AurumBar 会立即获取行情并显示在菜单栏。
+
+之后可以从菜单栏选择“设置个人 AppKey…”来更换凭据。已有 AppKey 不会显示在输入框中。
+
+## 使用
+
+点击菜单栏价格可以：
+
+- 查看价格、涨跌幅和行情时间
+- 立即刷新行情
+- 查看当前状态和最近一次错误
+- 更换 AppKey
+- 打开 AppKey 申请页面
+- 退出 AurumBar
+
+常用命令：
 
 ```bash
 # 查看版本
 aurumbar --version
 
-# 删除钥匙串中的 AppKey，下次启动重新提示
-aurumbar --reset-key
-
-# 启动、停止当前运行的监控
+# 启动或停止手动后台实例
 aurumbar start
 aurumbar stop
 
-# 查看 aurumbar start 的后台日志
-tail -f ~/Library/Logs/AurumBar/aurumbar.log
+# 删除钥匙串中的 AppKey
+aurumbar --reset-key
 
-# 启动、停止登录项
+# 管理登录启动服务
 brew services start aurumbar
 brew services stop aurumbar
-
-# 查看 brew services 的日志
-tail -f "$(brew --prefix)/var/log/aurumbar.log"
-
-# 卸载
-brew uninstall aurumbar
 ```
 
-日志以追加方式写入，目前不会自动轮转。AurumBar 不主动记录 AppKey 或完整请求 URL；分享日志前仍建议人工检查内容。
+## 日志与故障排查
 
-## 从源码开发
-
-要求 macOS 13 或更高版本。构建应用可使用 Xcode Command Line Tools；运行 Swift Testing 测试套件需要完整 Xcode（CI 也使用完整 Xcode）。
+手动运行 `aurumbar start` 时：
 
 ```bash
-# 完整 Xcode 环境
-swift test
+tail -f ~/Library/Logs/AurumBar/aurumbar.log
+```
 
-# 仅构建/运行应用时，Command Line Tools 即可
+通过 Homebrew Services 运行时：
+
+```bash
+tail -f "$(brew --prefix)/var/log/aurumbar.log"
+```
+
+如果菜单栏没有出现：
+
+```bash
+aurumbar stop
+aurumbar start
+```
+
+如果 AppKey 失效或需要重新配置：
+
+```bash
+aurumbar --reset-key
+aurumbar start
+```
+
+AurumBar 不会主动将 AppKey 或完整请求 URL 写入日志。提交 issue 前仍建议检查日志中是否包含不希望公开的信息。
+
+## 隐私
+
+- AppKey 保存在 macOS Keychain 中，不写入源码、行情缓存或应用日志。
+- 请求行情时，AppKey 会按照上游接口要求，通过 HTTPS 发送给聚合数据服务。
+- 最后一次有效行情仅保存在本机，用于离线或接口暂时无数据时继续展示。
+- 项目不包含自建账号系统、使用分析、广告 SDK 或崩溃上报服务。
+- `aurumbar --reset-key` 只删除 AppKey，不会删除本地行情缓存和日志。
+
+## 开发
+
+克隆仓库并构建：
+
+```bash
+git clone https://github.com/BackDyh/homebrew-gold-monitor.git
+cd homebrew-gold-monitor
+swift build
+```
+
+运行应用：
+
+```bash
 swift run aurumbar run
 ```
 
-生成未签名的 arm64/x86_64 通用候选包：
+运行测试需要完整 Xcode：
 
 ```bash
-scripts/build-release.sh 0.1.3 --allow-dirty --signing unsigned
+swift test
 ```
 
-脚本会在 `.build/release-artifacts/` 下生成 tarball、SHA-256 和 manifest，并自动运行 `scripts/verify-release.sh`。它不会创建 tag、GitHub Release 或修改 Formula。
+主要模块：
 
-`developer-id` 模式是显式可选项，需要设置 `AURUMBAR_CODESIGN_IDENTITY` 和已配置的 `AURUMBAR_NOTARY_PROFILE`。带 Apple 时间戳的签名产物不承诺逐字节可复现；裸 tarball 也不宣称已 staple 公证票据。
+```text
+Sources/AurumBarCore      行情模型、响应解析和 API 客户端
+Sources/AurumBarRuntime   刷新协调、状态呈现、Keychain 和单实例控制
+Sources/AurumBar          AppKit 菜单栏应用与命令行入口
+Tests                     核心逻辑和运行时测试
+```
 
-## 隐私与本地数据
+## 参与贡献
 
-- AppKey 保存在 macOS Keychain，service 为 `com.back.aurumbar`。
-- 请求上游行情时，AppKey 会按聚合数据接口要求作为 HTTPS query 参数发送；服务方仍可看到请求所需的 AppKey、IP 和请求时间。
-- 最近一次有效行情保存在本机 `com.back.aurumbar` UserDefaults，不包含 AppKey。
-- `aurumbar start` 会创建 `~/Library/Application Support/AurumBar/aurumbar.lock` 和本地日志。
-- 系统通知由本机 `/usr/bin/osascript` 发送。
-- AurumBar 没有自建账户、分析遥测或崩溃上报。
-- `aurumbar --reset-key` 只删除 Keychain 中的 AppKey，不会清理行情缓存或日志。
+欢迎提交 issue 和 pull request。
 
-## 发布流程
+提交修复或功能前，请尽量：
 
-源码版本可以在发布准备期间领先于 Homebrew 稳定版。当前 Formula 必须持续指向已经公开且可下载的版本，不能提前引用不存在的 Release：
+1. 说明问题、预期行为和复现方式。
+2. 为新增逻辑补充测试。
+3. 运行 `swift test` 和 `swift build -c release --product aurumbar`。
+4. 不要在代码、日志、截图或测试数据中提交真实 AppKey。
 
-1. 合并代码并让测试、universal candidate 和稳定 Formula CI 全部通过。
-2. 通过 `release-candidate` workflow 或本地脚本生成候选包，审核架构、manifest、SHA 和签名状态。
-3. 人工创建并推送版本 tag，创建 GitHub Release，上传审核过的同一份候选资产。
-4. 从公开 Release URL 重新下载资产并再次验证 SHA。
-5. 使用远端资产的实际 SHA 单独更新 Formula URL、checksum 和预编译安装逻辑。
-6. 在 Apple Silicon 和 Intel 环境执行 `brew fetch`、`brew install` 和 `brew test` 后再发布 Formula 更新。
+对于较大的功能，建议先创建 issue 讨论设计方向。
 
-## 数据说明
+## 数据与免责声明
 
-行情来自聚合数据黄金接口，仅供个人学习和参考，不构成投资建议。
+行情数据来自[聚合数据黄金接口](https://www.juhe.cn/docs/api/id/29)。本项目提供的信息仅供个人学习与参考，不保证实时性、准确性或完整性，也不构成投资建议。
+
+## License
+
+AurumBar 使用 [MIT License](LICENSE) 开源。

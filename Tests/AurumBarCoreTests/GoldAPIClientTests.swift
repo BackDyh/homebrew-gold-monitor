@@ -1,15 +1,21 @@
-import Testing
 import AurumBarCore
 import Foundation
+import XCTest
 
-@Suite(.serialized)
-struct GoldAPIClientTests {
-    init() {
+final class GoldAPIClientTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
         StubURLProtocol.handler = nil
         StubURLProtocol.attempts = 0
     }
 
-    @Test func retriesTransientNetworkFailureThenSucceeds() async throws {
+    override func tearDown() {
+        StubURLProtocol.handler = nil
+        StubURLProtocol.attempts = 0
+        super.tearDown()
+    }
+
+    func testRetriesTransientNetworkFailureThenSucceeds() async throws {
         StubURLProtocol.handler = { request, attempt in
             if attempt == 1 {
                 throw URLError(.timedOut)
@@ -19,30 +25,36 @@ struct GoldAPIClientTests {
 
         let quote = try await makeClient(maximumAttempts: 3).fetch(apiKey: "test")
 
-        #expect(quote.price == "954.01")
-        #expect(StubURLProtocol.attempts == 2)
+        XCTAssertEqual(quote.price, "954.01")
+        XCTAssertEqual(StubURLProtocol.attempts, 2)
     }
 
-    @Test func retriesServerErrorButNotClientError() async {
+    func testRetriesServerErrorButNotClientError() async {
         StubURLProtocol.handler = { request, _ in
             (Self.response(for: request, status: 503), Data())
         }
-        await #expect(throws: GoldAPIError.httpStatus(503)) {
-            try await makeClient(maximumAttempts: 3).fetch(apiKey: "test")
+        do {
+            _ = try await makeClient(maximumAttempts: 3).fetch(apiKey: "test")
+            XCTFail("Expected HTTP error")
+        } catch {
+            XCTAssertEqual(error as? GoldAPIError, .httpStatus(503))
+            XCTAssertEqual(StubURLProtocol.attempts, 3)
         }
-        #expect(StubURLProtocol.attempts == 3)
 
         StubURLProtocol.attempts = 0
         StubURLProtocol.handler = { request, _ in
             (Self.response(for: request, status: 401), Data())
         }
-        await #expect(throws: GoldAPIError.httpStatus(401)) {
-            try await makeClient(maximumAttempts: 3).fetch(apiKey: "test")
+        do {
+            _ = try await makeClient(maximumAttempts: 3).fetch(apiKey: "test")
+            XCTFail("Expected HTTP error")
+        } catch {
+            XCTAssertEqual(error as? GoldAPIError, .httpStatus(401))
+            XCTAssertEqual(StubURLProtocol.attempts, 1)
         }
-        #expect(StubURLProtocol.attempts == 1)
     }
 
-    @Test func doesNotRetryUnavailableQuote() async {
+    func testDoesNotRetryUnavailableQuote() async {
         StubURLProtocol.handler = { request, _ in
             let data = Data("""
             {"resultcode":"200","result":[{"7":{"variety":"Au99.99","latestpri":"--"}}]}
@@ -50,13 +62,16 @@ struct GoldAPIClientTests {
             return (Self.response(for: request, status: 200), data)
         }
 
-        await #expect(throws: GoldAPIError.quoteUnavailable) {
-            try await makeClient(maximumAttempts: 3).fetch(apiKey: "test")
+        do {
+            _ = try await makeClient(maximumAttempts: 3).fetch(apiKey: "test")
+            XCTFail("Expected unavailable quote")
+        } catch {
+            XCTAssertEqual(error as? GoldAPIError, .quoteUnavailable)
+            XCTAssertEqual(StubURLProtocol.attempts, 1)
         }
-        #expect(StubURLProtocol.attempts == 1)
     }
 
-    @Test func usesVersionedUserAgentAndEncodedAPIKey() async throws {
+    func testUsesVersionedUserAgentAndEncodedAPIKey() async throws {
         var capturedRequest: URLRequest?
         StubURLProtocol.handler = { request, _ in
             capturedRequest = request
@@ -65,20 +80,20 @@ struct GoldAPIClientTests {
 
         _ = try await makeClient().fetch(apiKey: "a key&value")
 
-        #expect(
-            capturedRequest?.value(forHTTPHeaderField: "User-Agent")
-                == AurumBarVersion.userAgent
+        XCTAssertEqual(
+            capturedRequest?.value(forHTTPHeaderField: "User-Agent"),
+            AurumBarVersion.userAgent
         )
         let components = capturedRequest?.url.flatMap {
             URLComponents(url: $0, resolvingAgainstBaseURL: false)
         }
-        #expect(
-            components?.queryItems?.first(where: { $0.name == "key" })?.value
-                == "a key&value"
+        XCTAssertEqual(
+            components?.queryItems?.first(where: { $0.name == "key" })?.value,
+            "a key&value"
         )
     }
 
-    @Test func cancellationStopsRetryDelay() async throws {
+    func testCancellationStopsRetryDelay() async throws {
         StubURLProtocol.handler = { _, _ in throw URLError(.timedOut) }
         let client = makeClient(maximumAttempts: 3, retryBaseDelay: 10)
         let task = Task { try await client.fetch(apiKey: "test") }
@@ -86,10 +101,14 @@ struct GoldAPIClientTests {
         try await waitForAttempts(1)
         task.cancel()
 
-        await #expect(throws: CancellationError.self) {
-            try await task.value
+        do {
+            _ = try await task.value
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {
+            XCTAssertEqual(StubURLProtocol.attempts, 1)
+        } catch {
+            XCTFail("Expected CancellationError, got \(error)")
         }
-        #expect(StubURLProtocol.attempts == 1)
     }
 
     private func makeClient(
@@ -109,7 +128,7 @@ struct GoldAPIClientTests {
         for _ in 0 ..< 100 where StubURLProtocol.attempts < count {
             try await Task.sleep(nanoseconds: 10_000_000)
         }
-        #expect(StubURLProtocol.attempts >= count)
+        XCTAssertGreaterThanOrEqual(StubURLProtocol.attempts, count)
     }
 
     private static let successData = Data("""
