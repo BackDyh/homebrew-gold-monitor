@@ -1,12 +1,11 @@
-import Testing
 import AurumBarCore
 import AurumBarRuntime
 import Foundation
+import XCTest
 
 @MainActor
-@Suite(.serialized)
-struct QuoteRefreshCoordinatorTests {
-    @Test func replacingKeyDiscardsStaleResult() async throws {
+final class QuoteRefreshCoordinatorTests: XCTestCase {
+    func testReplacingKeyDiscardsStaleResult() async throws {
         let fetcher = ControlledFetcher()
         let coordinator = QuoteRefreshCoordinator(apiKey: "old", fetcher: fetcher)
         var events: [QuoteRefreshCoordinator.Event] = []
@@ -25,10 +24,10 @@ struct QuoteRefreshCoordinatorTests {
             guard case let .succeeded(quote) = event else { return nil }
             return quote.price
         }
-        #expect(prices == ["950"])
+        XCTAssertEqual(prices, ["950"])
     }
 
-    @Test func duplicateRefreshIsCoalesced() async throws {
+    func testDuplicateRefreshIsCoalesced() async throws {
         let fetcher = ControlledFetcher()
         let coordinator = QuoteRefreshCoordinator(apiKey: "key", fetcher: fetcher)
 
@@ -37,7 +36,7 @@ struct QuoteRefreshCoordinatorTests {
         coordinator.refresh()
         try await fetcher.waitForRequests(1)
 
-        #expect(fetcher.requestedKeys == ["key"])
+        XCTAssertEqual(fetcher.requestedKeys, ["key"])
         fetcher.succeed(key: "key", price: "950")
         try await waitUntil { !coordinator.isRefreshing }
     }
@@ -49,7 +48,7 @@ struct QuoteRefreshCoordinatorTests {
             if condition() { return }
             try await Task.sleep(nanoseconds: 10_000_000)
         }
-        Issue.record("Condition did not become true")
+        XCTFail("Condition did not become true")
     }
 }
 
@@ -76,7 +75,7 @@ private final class ControlledFetcher: GoldQuoteFetching, @unchecked Sendable {
             if requestedKeys.count >= count { return }
             try await Task.sleep(nanoseconds: 10_000_000)
         }
-        Issue.record("Expected \(count) requests, got \(requestedKeys.count)")
+        XCTFail("Expected \(count) requests, got \(requestedKeys.count)")
     }
 
     func succeed(key: String, price: String) {

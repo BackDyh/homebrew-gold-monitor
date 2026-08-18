@@ -1,53 +1,49 @@
-import Testing
 import AurumBarCore
 import Foundation
+import XCTest
 
-@Suite(.serialized)
-struct GoldResponseParserTests {
-    @Test func parsesAu9999AndNormalizesPrice() throws {
+final class GoldResponseParserTests: XCTestCase {
+    func testParsesAu9999AndNormalizesPrice() throws {
         let quote = try GoldResponseParser.parse(json: successfulJSON(price: "0940.700"))
 
-        #expect(quote.name == "Au99.99")
-        #expect(quote.price == "940.7")
-        #expect(quote.changePercent == "+0.31%")
+        XCTAssertEqual(quote.name, "Au99.99")
+        XCTAssertEqual(quote.price, "940.7")
+        XCTAssertEqual(quote.changePercent, "+0.31%")
     }
 
-    @Test func acceptsNumericResultCodeAndPrice() throws {
+    func testAcceptsNumericResultCodeAndPrice() throws {
         let quote = try GoldResponseParser.parse(json: successfulJSON(
             resultCode: 200,
             price: NSNumber(value: 954.01)
         ))
 
-        #expect(quote.price == "954.01")
+        XCTAssertEqual(quote.price, "954.01")
     }
 
-    @Test func mapsMissingAndNullPriceToUnavailable() {
+    func testMapsMissingAndNullPriceToUnavailable() {
         for value: Any? in [nil, NSNull(), "", "  ", "--", "-", "—", "null", "NIL"] {
-            #expect(throws: GoldAPIError.quoteUnavailable) {
-                try GoldResponseParser.parse(json: successfulJSON(price: value))
+            XCTAssertThrowsError(try GoldResponseParser.parse(json: successfulJSON(price: value))) {
+                XCTAssertEqual($0 as? GoldAPIError, .quoteUnavailable)
             }
         }
     }
 
-    @Test func rejectsMalformedPricesCompletely() {
+    func testRejectsMalformedPricesCompletely() {
         let invalid: [Any] = [
             "940.70abc", "1,234.50", "1e3", "NaN", "Infinity", "940.1.2",
             "0", "-1", true, ["940"], ["value": "940"],
         ]
 
         for value in invalid {
-            #expect {
-                try GoldResponseParser.parse(json: successfulJSON(price: value))
-            } throws: { error in
-                if case .invalidPrice = error as? GoldAPIError {
-                    return true
+            XCTAssertThrowsError(try GoldResponseParser.parse(json: successfulJSON(price: value))) {
+                guard case .invalidPrice = $0 as? GoldAPIError else {
+                    return XCTFail("Expected invalidPrice for \(value), got \($0)")
                 }
-                return false
             }
         }
     }
 
-    @Test func nullOptionalFieldsUseFallbacks() throws {
+    func testNullOptionalFieldsUseFallbacks() throws {
         var json = successfulJSON(price: "940.70")
         var result = json["result"] as! [[String: Any]]
         var market = result[0]
@@ -59,35 +55,35 @@ struct GoldResponseParserTests {
         json["result"] = result
 
         let parsed = try GoldResponseParser.parse(json: json)
-        #expect(parsed.changePercent == "--")
-        #expect(parsed.sourceTime == "--")
+        XCTAssertEqual(parsed.changePercent, "--")
+        XCTAssertEqual(parsed.sourceTime, "--")
     }
 
-    @Test func nullReasonUsesFallback() {
-        #expect(throws: GoldAPIError.apiError("未知错误")) {
-            try GoldResponseParser.parse(json: [
-                "resultcode": "112",
-                "reason": NSNull(),
-            ])
+    func testNullReasonUsesFallback() {
+        XCTAssertThrowsError(try GoldResponseParser.parse(json: [
+            "resultcode": "112",
+            "reason": NSNull(),
+        ])) {
+            XCTAssertEqual($0 as? GoldAPIError, .apiError("未知错误"))
         }
     }
 
-    @Test func invalidOrMissingResultCodeIsInvalidResponse() {
+    func testInvalidOrMissingResultCodeIsInvalidResponse() {
         for value: Any? in [nil, NSNull(), true, ["200"]] {
             var json: [String: Any] = ["result": []]
             if let value { json["resultcode"] = value }
-            #expect(throws: GoldAPIError.invalidResponse) {
-                try GoldResponseParser.parse(json: json)
+            XCTAssertThrowsError(try GoldResponseParser.parse(json: json)) {
+                XCTAssertEqual($0 as? GoldAPIError, .invalidResponse)
             }
         }
     }
 
-    @Test func missingMarketData() {
-        #expect(throws: GoldAPIError.missingMarketData) {
-            try GoldResponseParser.parse(json: [
-                "resultcode": "200",
-                "result": [[:]],
-            ])
+    func testMissingMarketData() {
+        XCTAssertThrowsError(try GoldResponseParser.parse(json: [
+            "resultcode": "200",
+            "result": [[:]],
+        ])) {
+            XCTAssertEqual($0 as? GoldAPIError, .missingMarketData)
         }
     }
 

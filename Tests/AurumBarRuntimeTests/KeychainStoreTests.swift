@@ -1,41 +1,52 @@
-import Testing
 import AurumBarRuntime
 import Foundation
 import Security
+import XCTest
 
-struct KeychainStoreTests {
-    @Test func loadDistinguishesNotFoundFromFailure() throws {
+final class KeychainStoreTests: XCTestCase {
+    func testLoadDistinguishesNotFoundFromFailure() throws {
         let missing = StubKeychainBackend(copyStatus: errSecItemNotFound)
-        #expect(try KeychainStore(backend: missing).load() == nil)
+        XCTAssertNil(try KeychainStore(backend: missing).load())
 
         let denied = StubKeychainBackend(copyStatus: errSecAuthFailed)
-        #expect(throws: KeychainError.status(operation: .read, status: errSecAuthFailed)) {
-            try KeychainStore(backend: denied).load()
+        XCTAssertThrowsError(try KeychainStore(backend: denied).load()) {
+            XCTAssertEqual(
+                $0 as? KeychainError,
+                .status(operation: .read, status: errSecAuthFailed)
+            )
         }
     }
 
-    @Test func loadRejectsInvalidData() {
+    func testLoadRejectsInvalidData() {
         let backend = StubKeychainBackend(
             copyStatus: errSecSuccess,
             copiedItem: Data([0xFF]) as CFData
         )
-        #expect(throws: KeychainError.invalidData) {
-            try KeychainStore(backend: backend).load()
+        XCTAssertThrowsError(try KeychainStore(backend: backend).load()) {
+            XCTAssertEqual($0 as? KeychainError, .invalidData)
         }
     }
 
-    @Test func saveFallsBackToAdd() throws {
-        let backend = StubKeychainBackend(updateStatus: errSecItemNotFound, addStatus: errSecSuccess)
+    func testSaveFallsBackToAdd() throws {
+        let backend = StubKeychainBackend(
+            updateStatus: errSecItemNotFound,
+            addStatus: errSecSuccess
+        )
         try KeychainStore(backend: backend).save("secret")
-        #expect(backend.addCalls == 1)
+        XCTAssertEqual(backend.addCalls, 1)
     }
 
-    @Test func deleteIsIdempotentButPropagatesFailure() throws {
-        try KeychainStore(backend: StubKeychainBackend(deleteStatus: errSecItemNotFound)).delete()
+    func testDeleteIsIdempotentButPropagatesFailure() throws {
+        try KeychainStore(
+            backend: StubKeychainBackend(deleteStatus: errSecItemNotFound)
+        ).delete()
 
         let denied = StubKeychainBackend(deleteStatus: errSecAuthFailed)
-        #expect(throws: KeychainError.status(operation: .delete, status: errSecAuthFailed)) {
-            try KeychainStore(backend: denied).delete()
+        XCTAssertThrowsError(try KeychainStore(backend: denied).delete()) {
+            XCTAssertEqual(
+                $0 as? KeychainError,
+                .status(operation: .delete, status: errSecAuthFailed)
+            )
         }
     }
 }
