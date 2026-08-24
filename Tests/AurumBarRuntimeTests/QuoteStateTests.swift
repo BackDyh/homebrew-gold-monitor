@@ -38,6 +38,16 @@ final class QuoteStateTests: XCTestCase {
         XCTAssertTrue(presentation.toolTip.contains("暂无新行情"))
     }
 
+    func testDetailsShowCustomRefreshInterval() throws {
+        let interval = try XCTUnwrap(RefreshInterval(minutes: 75))
+        let presentation = StatusPresentation.make(
+            for: .available(quote),
+            refreshInterval: interval
+        )
+
+        XCTAssertTrue(presentation.detailsText.contains("自动刷新：每 1 小时 15 分钟"))
+    }
+
     func testErrorNotificationResetsAfterRecovery() {
         var policy = ErrorNotificationPolicy()
         let start = Date(timeIntervalSince1970: 1_000)

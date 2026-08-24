@@ -4,7 +4,6 @@ import AurumBarRuntime
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private static let refreshInterval: TimeInterval = 30 * 60
     private static let errorNotificationInterval: TimeInterval = 60 * 60
 
     private let client = GoldAPIClient()
@@ -12,20 +11,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let prompt = AppKeyPrompt()
     private let notifier = AppleScriptNotifier()
     private let quoteCache = QuoteCache()
+    private let refreshIntervalStore = RefreshIntervalStore()
+    private let refreshIntervalPrompt = RefreshIntervalPrompt()
 
     private var statusItem: NSStatusItem!
     private var infoItem: NSMenuItem!
     private var refreshItem: NSMenuItem!
+    private var refreshIntervalItem: NSMenuItem!
     private var timer: Timer?
     private var coordinator: QuoteRefreshCoordinator?
     private var currentQuote: GoldQuote?
     private var viewState: QuoteViewState = .starting(previous: nil)
+    private var refreshInterval = RefreshInterval.defaultValue
     private var lastNotifiedPrice: String?
     private var errorNotificationPolicy = ErrorNotificationPolicy()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         configureRuntimeControl()
         configureApplicationMenu()
+        refreshInterval = refreshIntervalStore.load()
         configureStatusItem()
         restoreCachedQuote()
         guard configureAPIKey() else { return }
@@ -93,6 +97,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         refreshItem.target = self
         menu.addItem(refreshItem)
+
+        refreshIntervalItem = NSMenuItem(
+            title: refreshIntervalMenuTitle,
+            action: #selector(changeRefreshInterval),
+            keyEquivalent: ""
+        )
+        refreshIntervalItem.target = self
+        menu.addItem(refreshIntervalItem)
 
         let detailsItem = NSMenuItem(
             title: "查看详情",
@@ -185,12 +197,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func scheduleRefresh() {
         timer?.invalidate()
-        let timer = Timer(timeInterval: Self.refreshInterval, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: refreshInterval.timeInterval, repeats: true) {
+            [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.coordinator?.refresh()
             }
         }
-        timer.tolerance = 60
+        timer.tolerance = min(60, refreshInterval.timeInterval * 0.1)
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
     }
@@ -245,12 +258,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func render() {
         guard statusItem != nil else { return }
-        let presentation = StatusPresentation.make(for: viewState)
+        let presentation = StatusPresentation.make(
+            for: viewState,
+            refreshInterval: refreshInterval
+        )
         statusItem.button?.title = presentation.statusTitle
         statusItem.button?.toolTip = presentation.toolTip
         infoItem.title = presentation.infoTitle
         refreshItem.title = coordinator?.isRefreshing == true ? "刷新中…" : "立即刷新"
         refreshItem.isEnabled = coordinator?.isRefreshing != true
+        refreshIntervalItem.title = refreshIntervalMenuTitle
+    }
+
+    private var refreshIntervalMenuTitle: String {
+        "刷新间隔：\(refreshInterval.displayText)…"
     }
 
     @objc private func refreshFromMenu() {
@@ -259,12 +280,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func showDetails() {
         NSApp.activate(ignoringOtherApps: true)
-        let presentation = StatusPresentation.make(for: viewState)
+        let presentation = StatusPresentation.make(
+            for: viewState,
+            refreshInterval: refreshInterval
+        )
         let alert = NSAlert()
         alert.messageText = "AurumBar 黄金监控"
         alert.alertStyle = presentation.isWarning ? .warning : .informational
         alert.informativeText = presentation.detailsText
         alert.runModal()
+    }
+
+    @objc private func changeRefreshInterval() {
+        guard case let .save(interval) = refreshIntervalPrompt.prompt(
+            current: refreshInterval
+        ) else {
+            return
+        }
+
+        refreshInterval = interval
+        refreshIntervalStore.save(interval)
+        if coordinator != nil {
+            scheduleRefresh()
+        }
+        render()
     }
 
     @objc private func changeAPIKey() {
