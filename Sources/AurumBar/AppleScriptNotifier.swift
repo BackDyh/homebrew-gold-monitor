@@ -1,3 +1,4 @@
+import AurumBarCore
 import Foundation
 
 struct AppleScriptNotifier {
@@ -20,7 +21,7 @@ struct AppleScriptNotifier {
         do {
             try process.run()
         } catch {
-            fputs("AurumBar notification failed: \(error)\n", stderr)
+            AurumBarLog.write("通知发送失败：\(error)")
         }
     }
 }

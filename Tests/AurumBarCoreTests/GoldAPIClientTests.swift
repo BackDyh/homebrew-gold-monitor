@@ -29,6 +29,34 @@ final class GoldAPIClientTests: XCTestCase {
         XCTAssertEqual(StubURLProtocol.attempts, 2)
     }
 
+    func testRetriesTLSFailureThenSucceeds() async throws {
+        StubURLProtocol.handler = { request, attempt in
+            if attempt == 1 {
+                throw URLError(.secureConnectionFailed)
+            }
+            return (Self.response(for: request, status: 200), Self.successData)
+        }
+
+        let quote = try await makeClient(maximumAttempts: 3).fetch(apiKey: "test")
+
+        XCTAssertEqual(quote.price, "954.01")
+        XCTAssertEqual(StubURLProtocol.attempts, 2)
+    }
+
+    func testSystemCancelledRequestIsRetriedAndReportedAsNetworkError() async {
+        StubURLProtocol.handler = { _, _ in throw URLError(.cancelled) }
+
+        do {
+            _ = try await makeClient(maximumAttempts: 2).fetch(apiKey: "test")
+            XCTFail("Expected network error")
+        } catch {
+            guard case .network = error as? GoldAPIError else {
+                return XCTFail("Expected network error, got \(error)")
+            }
+            XCTAssertEqual(StubURLProtocol.attempts, 2)
+        }
+    }
+
     func testRetriesServerErrorButNotClientError() async {
         StubURLProtocol.handler = { request, _ in
             (Self.response(for: request, status: 503), Data())

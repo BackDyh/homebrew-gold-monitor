@@ -8,6 +8,7 @@ private let alreadyRunningExitCode: Int32 = 75
 public enum RuntimeControl {
     public static let stopNotification = Notification.Name("com.back.aurumbar.stop")
     private static let fileManager = FileManager.default
+    private static let maximumLogSize = 5 * 1024 * 1024
 
     private static var applicationSupportURL: URL {
         fileManager.homeDirectoryForCurrentUser
@@ -29,6 +30,7 @@ public enum RuntimeControl {
             withIntermediateDirectories: true,
             attributes: [.posixPermissions: 0o700]
         )
+        rotateLogIfNeeded()
         if !fileManager.fileExists(atPath: logFileURL.path) {
             guard fileManager.createFile(
                 atPath: logFileURL.path,
@@ -61,6 +63,15 @@ public enum RuntimeControl {
             return
         }
         throw RuntimeControlError.launchFailed(process.terminationStatus)
+    }
+
+    private static func rotateLogIfNeeded() {
+        let size = (try? fileManager.attributesOfItem(atPath: logFileURL.path)[.size])
+            as? NSNumber
+        guard let size, size.intValue > maximumLogSize else { return }
+        let archivedURL = logFileURL.appendingPathExtension("1")
+        try? fileManager.removeItem(at: archivedURL)
+        try? fileManager.moveItem(at: logFileURL, to: archivedURL)
     }
 
     public static func requestStop() {

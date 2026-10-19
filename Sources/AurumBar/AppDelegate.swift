@@ -5,6 +5,7 @@ import AurumBarRuntime
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let errorNotificationInterval: TimeInterval = 60 * 60
+    private static let wakeRefreshDelay: UInt64 = 5_000_000_000
 
     private let client = GoldAPIClient()
     private let keychain = KeychainStore()
@@ -19,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var refreshItem: NSMenuItem!
     private var refreshIntervalItem: NSMenuItem!
     private var timer: Timer?
+    private var wakeRefreshTask: Task<Void, Never>?
     private var coordinator: QuoteRefreshCoordinator?
     private var currentQuote: GoldQuote?
     private var viewState: QuoteViewState = .starting(previous: nil)
@@ -33,14 +35,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         configureStatusItem()
         restoreCachedQuote()
         guard configureAPIKey() else { return }
+        configureWakeObserver()
         scheduleRefresh()
         coordinator?.refresh()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         timer?.invalidate()
+        wakeRefreshTask?.cancel()
         coordinator?.cancel()
         DistributedNotificationCenter.default().removeObserver(self)
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
+    }
+
+    private func configureWakeObserver() {
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(systemDidWake),
+            name: NSWorkspace.didWakeNotification,
+            object: nil
+        )
+    }
+
+    @objc private func systemDidWake(_ notification: Notification) {
+        AurumBarLog.write("系统已唤醒，稍后刷新行情")
+        wakeRefreshTask?.cancel()
+        wakeRefreshTask = Task { @MainActor [weak self] in
+            // 刚唤醒时网络往往尚未就绪，立即请求容易 TLS 握手失败。
+            try? await Task.sleep(nanoseconds: Self.wakeRefreshDelay)
+            guard !Task.isCancelled, let self, self.coordinator != nil else { return }
+            self.scheduleRefresh()
+            self.coordinator?.refresh()
+        }
     }
 
     private func configureRuntimeControl() {
@@ -222,7 +248,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let apiError = error as? GoldAPIError,
                apiError == .quoteUnavailable || apiError == .missingMarketData
             {
-                fputs("AurumBar: \(apiError.localizedDescription)\n", stderr)
+                AurumBarLog.write(apiError.localizedDescription)
                 viewState = .unavailable(previous: currentQuote)
                 errorNotificationPolicy.reset()
             } else {
@@ -244,7 +270,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func handleFailure(_ error: Error) {
         let message = error.localizedDescription
-        fputs("AurumBar: 行情请求失败：\(message)\n", stderr)
+        AurumBarLog.write("行情请求失败：\(message)")
         viewState = .failed(message: message, previous: currentQuote)
 
         if errorNotificationPolicy.shouldNotify(
@@ -327,6 +353,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func quit() {
         timer?.invalidate()
+        wakeRefreshTask?.cancel()
         coordinator?.cancel()
         NSApp.terminate(nil)
     }
