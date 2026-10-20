@@ -65,7 +65,9 @@ xcrun lipo -create \
   "$SCRATCH/arm64/$([ -d "$SCRATCH/arm64/arm64-apple-macosx/release" ] && echo arm64-apple-macosx/release || echo release)/aurumbar" \
   "$SCRATCH/x86_64/$([ -d "$SCRATCH/x86_64/x86_64-apple-macosx/release" ] && echo x86_64-apple-macosx/release || echo release)/aurumbar" \
   -output "$STAGING/aurumbar"
-xcrun lipo "$STAGING/aurumbar" -verify_arch arm64 x86_64
+for ARCH in arm64 x86_64; do
+  xcrun lipo "$STAGING/aurumbar" -verify_arch "$ARCH"
+done
 chmod 0755 "$STAGING/aurumbar"
 
 ACTUAL_VERSION=$("$STAGING/aurumbar" --version)

@@ -45,7 +45,9 @@ PY
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 tar -xzf "$ARCHIVE" -C "$TMP"
-xcrun lipo "$TMP/aurumbar" -verify_arch arm64 x86_64
+for ARCH in arm64 x86_64; do
+  xcrun lipo "$TMP/aurumbar" -verify_arch "$ARCH"
+done
 [[ $("$TMP/aurumbar" --version) == "AurumBar $VERSION" ]] || {
   echo "Binary version does not match manifest" >&2
   exit 1
