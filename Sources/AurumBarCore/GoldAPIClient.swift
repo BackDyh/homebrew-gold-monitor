@@ -71,7 +71,7 @@ public final class GoldAPIClient: @unchecked Sendable {
             } catch is CancellationError {
                 throw CancellationError()
             } catch let urlError as URLError {
-                if Task.isCancelled || urlError.code == .cancelled {
+                if Task.isCancelled {
                     throw CancellationError()
                 }
                 if shouldRetry(urlError), attempt < maximumAttempts {
@@ -91,10 +91,7 @@ public final class GoldAPIClient: @unchecked Sendable {
 
     private func waitBeforeRetry(after attempt: Int) async throws {
         let delay = retryBaseDelay * pow(2, Double(attempt - 1))
-        fputs(
-            "AurumBar: 第 \(attempt) 次请求失败，\(delay) 秒后进行网络重试\n",
-            stderr
-        )
+        AurumBarLog.write("第 \(attempt) 次请求失败，\(delay) 秒后进行网络重试")
         guard delay > 0 else {
             try Task.checkCancellation()
             return
@@ -112,6 +109,8 @@ public final class GoldAPIClient: @unchecked Sendable {
             .networkConnectionLost,
             .notConnectedToInternet,
             .resourceUnavailable,
+            .secureConnectionFailed,
+            .cancelled,
         ].contains(error.code)
     }
 

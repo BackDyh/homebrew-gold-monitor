@@ -41,6 +41,22 @@ final class QuoteRefreshCoordinatorTests: XCTestCase {
         try await waitUntil { !coordinator.isRefreshing }
     }
 
+    func testUnexpectedCancellationFromFetcherIsReportedAsFailure() async throws {
+        let fetcher = ControlledFetcher()
+        let coordinator = QuoteRefreshCoordinator(apiKey: "key", fetcher: fetcher)
+        var failures = 0
+        coordinator.onEvent = { event in
+            if case .failed = event { failures += 1 }
+        }
+
+        coordinator.refresh()
+        try await fetcher.waitForRequests(1)
+        fetcher.fail(key: "key", error: CancellationError())
+        try await waitUntil { !coordinator.isRefreshing }
+
+        XCTAssertEqual(failures, 1)
+    }
+
     private func waitUntil(
         _ condition: @escaping @MainActor () -> Bool
     ) async throws {
@@ -86,5 +102,10 @@ private final class ControlledFetcher: GoldQuoteFetching, @unchecked Sendable {
             changePercent: "0%",
             sourceTime: "now"
         ))
+    }
+
+    func fail(key: String, error: Error) {
+        let continuation = lock.withLock { continuations.removeValue(forKey: key) }
+        continuation?.resume(throwing: error)
     }
 }

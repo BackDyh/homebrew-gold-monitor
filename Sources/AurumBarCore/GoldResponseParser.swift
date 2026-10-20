@@ -31,14 +31,31 @@ public enum GoldResponseParser {
 
         guard
             let result = payload["result"] as? [[String: Any]],
-            let market = result.first,
-            let record = market.values.compactMap({ $0 as? [String: Any] }).first(where: {
-                normalizedVariety($0["variety"]) == "au9999"
-            })
+            let market = result.first
         else {
             throw GoldAPIError.missingMarketData
         }
 
+        // 接口同时返回 "Au99.99" 和 "AU99.99"，后者常年为 "--"；字典无序，必须显式排序后逐个尝试。
+        let candidates = market
+            .sorted { $0.key < $1.key }
+            .compactMap { $0.value as? [String: Any] }
+            .filter { normalizedVariety($0["variety"]) == "au9999" }
+        let preferred = candidates.filter { stringValue($0["variety"]) == "Au99.99" }
+            + candidates.filter { stringValue($0["variety"]) != "Au99.99" }
+
+        var firstError: Error?
+        for record in preferred {
+            do {
+                return try quote(from: record)
+            } catch {
+                firstError = firstError ?? error
+            }
+        }
+        throw firstError ?? GoldAPIError.missingMarketData
+    }
+
+    private static func quote(from record: [String: Any]) throws -> GoldQuote {
         let rawPrice = record["latestpri"]
         guard rawPrice != nil, !(rawPrice is NSNull) else {
             throw GoldAPIError.quoteUnavailable

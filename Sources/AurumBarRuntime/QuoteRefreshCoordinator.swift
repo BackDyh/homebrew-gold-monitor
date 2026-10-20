@@ -61,15 +61,6 @@ public final class QuoteRefreshCoordinator {
             let result: Result<GoldQuote, Error>
             do {
                 result = .success(try await fetcher.fetch(apiKey: requestKey))
-            } catch is CancellationError {
-                guard let self,
-                      !Task.isCancelled,
-                      self.generation == requestGeneration
-                else {
-                    return
-                }
-                self.requestTask = nil
-                return
             } catch {
                 result = .failure(error)
             }

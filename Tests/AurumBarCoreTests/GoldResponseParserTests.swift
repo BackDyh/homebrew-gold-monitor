@@ -78,6 +78,46 @@ final class GoldResponseParserTests: XCTestCase {
         }
     }
 
+    func testPrefersValidAu9999OverPlaceholderUppercaseVariant() throws {
+        for placeholderKey in ["1", "7", "99"] {
+            let json: [String: Any] = [
+                "resultcode": "200",
+                "result": [[
+                    placeholderKey: ["variety": "AU99.99", "latestpri": "--", "limit": "NaN%"],
+                    "4": ["variety": "Au99.99", "latestpri": "899.01", "limit": "-0.28%"],
+                ]],
+            ]
+
+            let quote = try GoldResponseParser.parse(json: json)
+            XCTAssertEqual(quote.name, "Au99.99")
+            XCTAssertEqual(quote.price, "899.01")
+        }
+    }
+
+    func testFallsBackToUppercaseVariantWhenPreferredIsUnavailable() throws {
+        let quote = try GoldResponseParser.parse(json: [
+            "resultcode": "200",
+            "result": [[
+                "4": ["variety": "Au99.99", "latestpri": "--"],
+                "12": ["variety": "AU99.99", "latestpri": "899.50"],
+            ]],
+        ])
+
+        XCTAssertEqual(quote.price, "899.5")
+    }
+
+    func testReportsPreferredErrorWhenNoCandidateIsValid() {
+        XCTAssertThrowsError(try GoldResponseParser.parse(json: [
+            "resultcode": "200",
+            "result": [[
+                "4": ["variety": "Au99.99", "latestpri": "--"],
+                "12": ["variety": "AU99.99", "latestpri": "--"],
+            ]],
+        ])) {
+            XCTAssertEqual($0 as? GoldAPIError, .quoteUnavailable)
+        }
+    }
+
     func testMissingMarketData() {
         XCTAssertThrowsError(try GoldResponseParser.parse(json: [
             "resultcode": "200",
