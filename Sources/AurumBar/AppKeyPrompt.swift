@@ -20,7 +20,7 @@ public final class AppKeyPrompt {
             alert.alertStyle = .informational
             alert.messageText = firstRun ? "欢迎使用 AurumBar" : "设置个人 AppKey"
             alert.informativeText = firstRun
-                ? "首次启动需要你自己的聚合数据 AppKey。点击“打开申请页面”申请黄金数据（接口 ID 29），复制 AppKey 后粘贴到下方。Key 只保存在本机钥匙串。"
+                ? "首次启动需要你自己的聚合数据 AppKey。点击“打开申请页面”申请黄金数据（接口 ID 29），复制 AppKey 后粘贴到下方。Key 只保存在本机，仅你的账户可读。"
                 : "输入新的聚合数据黄金接口 AppKey。取消会保留当前 AppKey，保存后会立即刷新。"
 
             let field = NSSecureTextField(

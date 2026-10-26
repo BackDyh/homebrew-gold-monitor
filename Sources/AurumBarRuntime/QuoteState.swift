@@ -17,7 +17,9 @@ public struct StatusPresentation: Equatable {
 
     public static func make(
         for state: QuoteViewState,
-        refreshInterval: RefreshInterval = .defaultValue
+        refreshInterval: RefreshInterval = .defaultValue,
+        nextRefreshText: String? = nil,
+        usageText: String? = nil
     ) -> StatusPresentation {
         switch state {
         case let .starting(previous):
@@ -29,7 +31,9 @@ public struct StatusPresentation: Equatable {
                     detailsText: quoteDetails(
                         quote,
                         status: "正在刷新",
-                        refreshInterval: refreshInterval
+                        refreshInterval: refreshInterval,
+                        nextRefreshText: nextRefreshText,
+                        usageText: usageText
                     ),
                     isWarning: false
                 )
@@ -50,7 +54,9 @@ public struct StatusPresentation: Equatable {
                 detailsText: quoteDetails(
                     quote,
                     status: "正常",
-                    refreshInterval: refreshInterval
+                    refreshInterval: refreshInterval,
+                    nextRefreshText: nextRefreshText,
+                    usageText: usageText
                 ),
                 isWarning: false
             )
@@ -64,7 +70,9 @@ public struct StatusPresentation: Equatable {
                     detailsText: quoteDetails(
                         quote,
                         status: "暂无新行情，显示上次有效价格",
-                        refreshInterval: refreshInterval
+                        refreshInterval: refreshInterval,
+                        nextRefreshText: nextRefreshText,
+                        usageText: usageText
                     ),
                     isWarning: false
                 )
@@ -86,7 +94,9 @@ public struct StatusPresentation: Equatable {
                     detailsText: quoteDetails(
                         quote,
                         status: "最近错误：\(message)",
-                        refreshInterval: refreshInterval
+                        refreshInterval: refreshInterval,
+                        nextRefreshText: nextRefreshText,
+                        usageText: usageText
                     ),
                     isWarning: true
                 )
@@ -109,15 +119,19 @@ public struct StatusPresentation: Equatable {
     private static func quoteDetails(
         _ quote: GoldQuote,
         status: String,
-        refreshInterval: RefreshInterval
+        refreshInterval: RefreshInterval,
+        nextRefreshText: String?,
+        usageText: String?
     ) -> String {
         [
             "\(quote.name)：\(quote.price) 元/克",
             "涨跌幅：\(quote.changePercent)",
             "行情时间：\(quote.sourceTime)",
-            "自动刷新：每 \(refreshInterval.displayText)",
+            "自动刷新：开盘时段每 \(refreshInterval.displayText)",
+            nextRefreshText.map { "下次自动刷新：\($0)" },
+            usageText.map { "今日接口调用：\($0)" },
             "当前状态：\(status)",
-        ].joined(separator: "\n")
+        ].compactMap { $0 }.joined(separator: "\n")
     }
 }
 

@@ -13,7 +13,7 @@ final class RefreshIntervalPrompt {
             let alert = NSAlert()
             alert.alertStyle = .informational
             alert.messageText = "设置刷新间隔"
-            alert.informativeText = "输入 1–1440 之间的整数，单位为分钟。保存后会重新计算下一次自动刷新时间；较短的间隔会更快消耗接口调用额度。"
+            alert.informativeText = "输入 1–1440 之间的整数，单位为分钟。只在开盘时段按此间隔自动刷新，休市期间暂停。保存后会重新计算下一次自动刷新时间；较短的间隔会更快消耗接口调用额度。"
 
             let field = NSTextField(
                 frame: NSRect(x: 0, y: 0, width: 260, height: 24)

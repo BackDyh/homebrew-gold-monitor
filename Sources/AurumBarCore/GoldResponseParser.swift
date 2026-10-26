@@ -5,6 +5,8 @@ public enum GoldResponseParser {
     private static let pricePattern = try! NSRegularExpression(
         pattern: #"^[0-9]+(?:\.[0-9]+)?$"#
     )
+    // 聚合数据：10012 请求超过次数限制，10013 测试 KEY 超过请求限制。
+    private static let quotaErrorCodes: Set<Int> = [10012, 10013]
 
     public static func parse(data: Data) throws -> GoldQuote {
         let json: Any
@@ -26,6 +28,12 @@ public enum GoldResponseParser {
         }
         guard resultCode == 200 else {
             let reason = stringValue(payload["reason"], fallback: "未知错误")
+            let errorCode = scalarString(payload["error_code"]).flatMap { Int($0) }
+            if errorCode.map(quotaErrorCodes.contains) == true
+                || reason.lowercased().contains("exceeds the limit")
+            {
+                throw GoldAPIError.quotaExceeded
+            }
             throw GoldAPIError.apiError(reason)
         }
 

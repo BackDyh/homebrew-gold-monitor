@@ -23,6 +23,7 @@ public enum GoldAPIError: LocalizedError, Equatable {
     case invalidResponse
     case httpStatus(Int)
     case apiError(String)
+    case quotaExceeded
     case missingMarketData
     case quoteUnavailable
     case invalidPrice(String)
@@ -36,6 +37,8 @@ public enum GoldAPIError: LocalizedError, Equatable {
             return "接口 HTTP 状态异常：\(statusCode)"
         case let .apiError(reason):
             return "接口错误：\(reason)"
+        case .quotaExceeded:
+            return "接口调用次数已用完，暂停自动刷新至次日"
         case .missingMarketData:
             return "接口结果中缺少 Au99.99 行情"
         case .quoteUnavailable:
