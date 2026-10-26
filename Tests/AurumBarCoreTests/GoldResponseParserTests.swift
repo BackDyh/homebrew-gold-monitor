@@ -68,6 +68,29 @@ final class GoldResponseParserTests: XCTestCase {
         }
     }
 
+    func testQuotaErrorsAreRecognized() {
+        let payloads: [[String: Any]] = [
+            ["resultcode": "112", "reason": "request exceeds the limit!", "error_code": 10012],
+            ["resultcode": "112", "reason": "超过次数限制", "error_code": "10013"],
+            ["resultcode": "112", "reason": "Request Exceeds The Limit"],
+        ]
+        for payload in payloads {
+            XCTAssertThrowsError(try GoldResponseParser.parse(json: payload)) {
+                XCTAssertEqual($0 as? GoldAPIError, .quotaExceeded)
+            }
+        }
+    }
+
+    func testOtherAPIErrorsKeepReason() {
+        XCTAssertThrowsError(try GoldResponseParser.parse(json: [
+            "resultcode": "101",
+            "reason": "KEY ERROR!",
+            "error_code": 10001,
+        ])) {
+            XCTAssertEqual($0 as? GoldAPIError, .apiError("KEY ERROR!"))
+        }
+    }
+
     func testInvalidOrMissingResultCodeIsInvalidResponse() {
         for value: Any? in [nil, NSNull(), true, ["200"]] {
             var json: [String: Any] = ["result": []]

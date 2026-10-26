@@ -126,7 +126,7 @@ func printHelp() {
       aurumbar start        静默地在后台启动菜单栏监控
       aurumbar stop         停止正在运行的监控
       aurumbar --version    显示版本
-      aurumbar --reset-key  删除钥匙串中的 AppKey
+      aurumbar --reset-key  删除已保存的 AppKey
       aurumbar --help       显示帮助
     """)
 }
@@ -137,7 +137,7 @@ case "--version":
     exit(0)
 case "--reset-key":
     do {
-        try KeychainStore().delete()
+        try AppKeyStore().delete()
         print("已删除 AurumBar AppKey，下次启动会重新提示。")
         exit(0)
     } catch {

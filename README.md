@@ -19,11 +19,13 @@ AurumBar 是一个轻量的原生 macOS 菜单栏应用，用于查看上海黄�
 
 - 在菜单栏直接显示最新价格
 - 默认每 30 分钟自动刷新，可自定义为 1–1440 分钟，也可随时手动刷新
+- 只在上海黄金交易所开盘时段自动刷新（周一至周五 9:00–15:30、20:00–次日 02:30），收盘后补取一次收盘价，休市期间不消耗接口额度
+- 按聚合数据每日 50 次的默认额度分配自动刷新（预留 5 次给手动刷新）；间隔设得太短时会自动拉长，额度用完则暂停到次日。额度不同可执行 `defaults write com.back.aurumbar daily-request-limit -int 次数` 后重启
 - 价格变化时发送 macOS 系统通知
 - 网络临时异常时进行有限重试
 - 无新行情时继续显示最后一次有效价格
 - 自动适配 macOS 明暗外观
-- AppKey 存储在 macOS 钥匙串中
+- AppKey 保存在本机仅当前用户可读的文件中，升级后不会反复弹出钥匙串授权
 - 支持 Apple Silicon 与 Intel Mac
 
 ## 系统要求
@@ -96,7 +98,7 @@ aurumbar --version
 aurumbar start
 aurumbar stop
 
-# 删除钥匙串中的 AppKey
+# 删除已保存的 AppKey
 aurumbar --reset-key
 
 # 管理登录启动服务
@@ -136,7 +138,8 @@ AurumBar 不会主动将 AppKey 或完整请求 URL 写入日志。提交 issue 
 
 ## 隐私
 
-- AppKey 保存在 macOS Keychain 中，不写入源码、行情缓存或应用日志。
+- AppKey 保存在 `~/Library/Application Support/AurumBar/appkey`（权限 600，仅当前用户可读写），不写入源码、行情缓存或应用日志。以你的账户身份运行的其他程序也能读取这个文件。
+- 旧版本保存在钥匙串中的 AppKey 会在首次启动时自动迁移到该文件，并删除钥匙串中的旧条目；迁移时会最后弹出一次钥匙串授权。
 - 请求行情时，AppKey 会按照上游接口要求，通过 HTTPS 发送给聚合数据服务。
 - 最后一次有效行情仅保存在本机，用于离线或接口暂时无数据时继续展示。
 - 项目不包含自建账号系统、使用分析、广告 SDK 或崩溃上报服务。
@@ -168,7 +171,7 @@ swift test
 
 ```text
 Sources/AurumBarCore      行情模型、响应解析和 API 客户端
-Sources/AurumBarRuntime   刷新协调、状态呈现、Keychain 和单实例控制
+Sources/AurumBarRuntime   刷新协调、交易时段、状态呈现、AppKey 存储和单实例控制
 Sources/AurumBar          AppKit 菜单栏应用与命令行入口
 Tests                     核心逻辑和运行时测试
 ```

@@ -6,20 +6,30 @@ import AurumBarRuntime
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let errorNotificationInterval: TimeInterval = 60 * 60
     private static let wakeRefreshDelay: UInt64 = 5_000_000_000
+    private static let nextRefreshFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "M月d日 HH:mm"
+        return formatter
+    }()
 
     private let client = GoldAPIClient()
-    private let keychain = KeychainStore()
+    private let keyStore = AppKeyStore()
     private let prompt = AppKeyPrompt()
     private let notifier = AppleScriptNotifier()
     private let quoteCache = QuoteCache()
     private let refreshIntervalStore = RefreshIntervalStore()
     private let refreshIntervalPrompt = RefreshIntervalPrompt()
+    private let schedule = TradingSchedule.shanghaiGold
+    private let requestCounter = DailyRequestCounter()
 
     private var statusItem: NSStatusItem!
     private var infoItem: NSMenuItem!
     private var refreshItem: NSMenuItem!
     private var refreshIntervalItem: NSMenuItem!
     private var timer: Timer?
+    private var nextRefreshDate: Date?
+    private var lastSuccessDate: Date?
+    private var quotaPausedUntil: Date?
     private var wakeRefreshTask: Task<Void, Never>?
     private var coordinator: QuoteRefreshCoordinator?
     private var currentQuote: GoldQuote?
@@ -58,15 +68,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func systemDidWake(_ notification: Notification) {
-        AurumBarLog.write("系统已唤醒，稍后刷新行情")
         wakeRefreshTask?.cancel()
         wakeRefreshTask = Task { @MainActor [weak self] in
             // 刚唤醒时网络往往尚未就绪，立即请求容易 TLS 握手失败。
             try? await Task.sleep(nanoseconds: Self.wakeRefreshDelay)
             guard !Task.isCancelled, let self, self.coordinator != nil else { return }
             self.scheduleRefresh()
+            let now = Date()
+            guard !self.isQuotaPaused(at: now),
+                  self.requestCounter.remainingAutomatic(on: now) > 0
+            else {
+                AurumBarLog.write("系统已唤醒，今日接口额度已用完，跳过刷新")
+                return
+            }
+            guard RefreshPlanner.shouldRefreshOnResume(
+                at: now,
+                lastSuccess: self.lastSuccessDate,
+                schedule: self.schedule
+            ) else {
+                AurumBarLog.write("系统已唤醒，休市中，跳过刷新")
+                return
+            }
+            AurumBarLog.write("系统已唤醒，刷新行情")
             self.coordinator?.refresh()
         }
+    }
+
+    private func isQuotaPaused(at date: Date) -> Bool {
+        quotaPausedUntil.map { date < $0 } ?? false
     }
 
     private func configureRuntimeControl() {
@@ -179,7 +208,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func configureAPIKey() -> Bool {
         do {
-            if let storedKey = try keychain.load(), !storedKey.isEmpty {
+            if let storedKey = try keyStore.load(), !storedKey.isEmpty {
                 configureCoordinator(apiKey: storedKey)
                 return true
             }
@@ -213,7 +242,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func persistAPIKey(_ key: String) -> Bool {
         do {
-            try keychain.save(key)
+            try keyStore.save(key)
             return true
         } catch {
             prompt.showError(error.localizedDescription)
@@ -223,29 +252,72 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func scheduleRefresh() {
         timer?.invalidate()
-        let timer = Timer(timeInterval: refreshInterval.timeInterval, repeats: true) {
-            [weak self] _ in
+        let now = Date()
+        let fireDate: Date
+        if let pausedUntil = quotaPausedUntil, now < pausedUntil {
+            fireDate = RefreshPlanner.firstRefresh(atOrAfter: pausedUntil, schedule: schedule)
+        } else {
+            fireDate = RefreshPlanner.nextRefresh(
+                after: now,
+                interval: refreshInterval,
+                remainingRequests: requestCounter.remainingAutomatic(on: now),
+                schedule: schedule
+            )
+        }
+
+        let timer = Timer(fire: fireDate, interval: 0, repeats: false) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.coordinator?.refresh()
+                guard let self else { return }
+                if self.requestCounter.remainingAutomatic() > 0 {
+                    self.coordinator?.refresh()
+                }
+                self.scheduleRefresh()
             }
         }
         timer.tolerance = min(60, refreshInterval.timeInterval * 0.1)
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
+        nextRefreshDate = fireDate
+        if let nextRefreshText {
+            AurumBarLog.write("下次自动刷新：\(nextRefreshText)")
+        }
+        render()
+    }
+
+    private func pauseForQuota() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let tomorrow = calendar.date(
+            byAdding: .day,
+            value: 1,
+            to: calendar.startOfDay(for: Date())
+        )!
+        guard quotaPausedUntil != tomorrow else { return }
+        quotaPausedUntil = tomorrow
+        scheduleRefresh()
     }
 
     private func handle(_ event: QuoteRefreshCoordinator.Event) {
         switch event {
         case .started:
+            requestCounter.record()
             viewState = .starting(previous: currentQuote)
         case let .succeeded(quote):
             currentQuote = quote
             quoteCache.save(quote)
             viewState = .available(quote)
+            lastSuccessDate = Date()
             errorNotificationPolicy.reset()
             notifyPriceChange(quote)
+            if quotaPausedUntil != nil {
+                quotaPausedUntil = nil
+                scheduleRefresh()
+            }
         case let .failed(error):
-            if let apiError = error as? GoldAPIError,
+            if error as? GoldAPIError == .quotaExceeded {
+                handleFailure(error)
+                pauseForQuota()
+            } else if let apiError = error as? GoldAPIError,
                apiError == .quoteUnavailable || apiError == .missingMarketData
             {
                 AurumBarLog.write(apiError.localizedDescription)
@@ -286,7 +358,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard statusItem != nil else { return }
         let presentation = StatusPresentation.make(
             for: viewState,
-            refreshInterval: refreshInterval
+            refreshInterval: refreshInterval,
+            nextRefreshText: nextRefreshText,
+            usageText: "\(requestCounter.count())/\(requestCounter.dailyLimit) 次"
         )
         statusItem.button?.title = presentation.statusTitle
         statusItem.button?.toolTip = presentation.toolTip
@@ -294,6 +368,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshItem.title = coordinator?.isRefreshing == true ? "刷新中…" : "立即刷新"
         refreshItem.isEnabled = coordinator?.isRefreshing != true
         refreshIntervalItem.title = refreshIntervalMenuTitle
+    }
+
+    private var nextRefreshText: String? {
+        guard let nextRefreshDate else { return nil }
+        let time = Self.nextRefreshFormatter.string(from: nextRefreshDate)
+        if isQuotaPaused(at: Date()) || requestCounter.remainingAutomatic() == 0 {
+            return "\(time)（今日接口额度已用完）"
+        }
+        return schedule.isOpen(at: Date()) ? time : "\(time)（休市中）"
     }
 
     private var refreshIntervalMenuTitle: String {

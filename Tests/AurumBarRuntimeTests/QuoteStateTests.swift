@@ -45,7 +45,17 @@ final class QuoteStateTests: XCTestCase {
             refreshInterval: interval
         )
 
-        XCTAssertTrue(presentation.detailsText.contains("自动刷新：每 1 小时 15 分钟"))
+        XCTAssertTrue(presentation.detailsText.contains("自动刷新：开盘时段每 1 小时 15 分钟"))
+        XCTAssertFalse(presentation.detailsText.contains("下次自动刷新"))
+    }
+
+    func testDetailsShowNextRefreshWhenProvided() {
+        let presentation = StatusPresentation.make(
+            for: .available(quote),
+            nextRefreshText: "10月26日 20:01（休市中）"
+        )
+
+        XCTAssertTrue(presentation.detailsText.contains("下次自动刷新：10月26日 20:01（休市中）"))
     }
 
     func testErrorNotificationResetsAfterRecovery() {
