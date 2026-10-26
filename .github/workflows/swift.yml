@@ -31,7 +31,7 @@ jobs:
         run: swift test
 
       - name: Build release candidate
-        run: scripts/build-release.sh 0.1.4 --signing unsigned
+        run: scripts/build-release.sh 0.1.5 --signing unsigned
 
       - name: Validate scripts and Formula
         run: |
